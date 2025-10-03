@@ -1,0 +1,103 @@
+# Build artifacts
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+*.exe
+*.out
+a.out
+
+# Compiled binaries
+undos
+undol
+test_undos
+
+# Object files
+*.obj
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Core dumps
+core
+core.*
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editor files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Log files
+*.log
+logs/
+
+# Test files
+test_*
+*_test
+tests/
+
+# Documentation build
+docs/_build/
+site/
+
+# Package managers
+node_modules/
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Trash directory (the actual trash location)
+.trash/
+undos_trash/
+~/.local/share/undos_trash/
+
+# IDE and editor specific
+*.code-workspace
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+
+# Makefile generated files
+.deps/
+.depend
+
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Profiling
+*.prof
+gmon.out
+
+# Static analysis
+*.sarif

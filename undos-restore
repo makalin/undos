@@ -1,0 +1,322 @@
+#!/bin/bash
+
+# undos - Restore deleted files from undos trash
+# Usage: undos [options] [file_pattern]
+# Options:
+#   -l, --list     List deleted files
+#   -i, --interactive  Interactive restore with fzf
+#   -h, --help     Show help
+#   -v, --version  Show version
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Default trash directory
+DEFAULT_TRASH_DIR="$HOME/.local/share/undos_trash"
+TRASH_DIR="${UNDOS_TRASH:-$DEFAULT_TRASH_DIR}"
+LOG_FILE="$TRASH_DIR/undos.log"
+
+# Version
+VERSION="1.0.0"
+
+# Show help
+show_help() {
+    cat << EOF
+undos - Restore deleted files from undos trash
+
+USAGE:
+    undos [OPTIONS] [FILE_PATTERN]
+
+OPTIONS:
+    -l, --list         List all deleted files
+    -i, --interactive  Interactive restore with fzf (if available)
+    -h, --help         Show this help message
+    -v, --version      Show version information
+    --log              Show deletion log
+
+EXAMPLES:
+    undos                    # List recent deletions
+    undos file.txt           # Restore specific file
+    undos -i                 # Interactive restore
+    undos --list             # List all deleted files
+    undos --log              # Show deletion log
+
+ENVIRONMENT:
+    UNDOS_TRASH              Trash directory (default: ~/.local/share/undos_trash)
+
+EOF
+}
+
+# Show version
+show_version() {
+    echo "undos version $VERSION"
+}
+
+# Check if trash directory exists
+check_trash_dir() {
+    if [[ ! -d "$TRASH_DIR" ]]; then
+        echo -e "${RED}Error: Trash directory does not exist: $TRASH_DIR${NC}" >&2
+        echo "Make sure undos is properly installed and configured." >&2
+        exit 1
+    fi
+}
+
+# Check if log file exists
+check_log_file() {
+    if [[ ! -f "$LOG_FILE" ]]; then
+        echo -e "${YELLOW}Warning: No deletion log found at $LOG_FILE${NC}" >&2
+        echo "No files have been deleted yet." >&2
+        exit 0
+    fi
+}
+
+# List deleted files
+list_deleted_files() {
+    check_trash_dir
+    check_log_file
+    
+    echo -e "${BLUE}Deleted files in trash:${NC}"
+    echo "=================================="
+    
+    if [[ ! -d "$TRASH_DIR" ]] || [[ -z "$(ls -A "$TRASH_DIR" 2>/dev/null)" ]]; then
+        echo "No files in trash."
+        return 0
+    fi
+    
+    # Read log file and display entries
+    while IFS='|' read -r timestamp original_path trash_path; do
+        if [[ -n "$timestamp" && -n "$original_path" && -n "$trash_path" ]]; then
+            # Check if file still exists in trash
+            if [[ -e "$trash_path" ]]; then
+                echo -e "${GREEN}✓${NC} $original_path (deleted: $timestamp)"
+            else
+                echo -e "${RED}✗${NC} $original_path (deleted: $timestamp) - file not found in trash"
+            fi
+        fi
+    done < "$LOG_FILE"
+}
+
+# Show deletion log
+show_log() {
+    check_trash_dir
+    check_log_file
+    
+    echo -e "${BLUE}Deletion Log:${NC}"
+    echo "=============="
+    
+    while IFS='|' read -r timestamp original_path trash_path; do
+        if [[ -n "$timestamp" && -n "$original_path" && -n "$trash_path" ]]; then
+            echo "Time: $timestamp"
+            echo "Original: $original_path"
+            echo "Trash: $trash_path"
+            echo "---"
+        fi
+    done < "$LOG_FILE"
+}
+
+# Find file in trash by pattern
+find_in_trash() {
+    local pattern="$1"
+    local found_files=()
+    
+    if [[ ! -d "$TRASH_DIR" ]]; then
+        return 1
+    fi
+    
+    # Search through log file for matching files
+    while IFS='|' read -r timestamp original_path trash_path; do
+        if [[ -n "$timestamp" && -n "$original_path" && -n "$trash_path" ]]; then
+            # Check if pattern matches original path or basename
+            local basename=$(basename "$original_path")
+            if [[ "$original_path" == *"$pattern"* ]] || [[ "$basename" == *"$pattern"* ]]; then
+                if [[ -e "$trash_path" ]]; then
+                    found_files+=("$original_path|$trash_path")
+                fi
+            fi
+        fi
+    done < "$LOG_FILE"
+    
+    # Print found files
+    for file_info in "${found_files[@]}"; do
+        echo "$file_info"
+    done
+}
+
+# Restore file
+restore_file() {
+    local original_path="$1"
+    local trash_path="$2"
+    
+    # Create directory if it doesn't exist
+    local dir=$(dirname "$original_path")
+    if [[ ! -d "$dir" ]]; then
+        mkdir -p "$dir"
+    fi
+    
+    # Copy file back
+    if cp -r "$trash_path" "$original_path" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Restored: $original_path"
+        
+        # Remove from trash
+        rm -rf "$trash_path"
+        
+        # Update log file (remove the entry)
+        local temp_log=$(mktemp)
+        while IFS='|' read -r timestamp orig_path trash_path_entry; do
+            if [[ "$orig_path" != "$original_path" ]]; then
+                echo "$timestamp|$orig_path|$trash_path_entry" >> "$temp_log"
+            fi
+        done < "$LOG_FILE"
+        mv "$temp_log" "$LOG_FILE"
+        
+        return 0
+    else
+        echo -e "${RED}✗${NC} Failed to restore: $original_path" >&2
+        return 1
+    fi
+}
+
+# Interactive restore with fzf
+interactive_restore() {
+    check_trash_dir
+    check_log_file
+    
+    # Check if fzf is available
+    if ! command -v fzf >/dev/null 2>&1; then
+        echo -e "${YELLOW}Warning: fzf not found. Falling back to list mode.${NC}" >&2
+        list_deleted_files
+        return 0
+    fi
+    
+    # Prepare file list for fzf
+    local file_list=$(mktemp)
+    while IFS='|' read -r timestamp original_path trash_path; do
+        if [[ -n "$timestamp" && -n "$original_path" && -n "$trash_path" ]]; then
+            if [[ -e "$trash_path" ]]; then
+                echo "$original_path|$trash_path" >> "$file_list"
+            fi
+        fi
+    done < "$LOG_FILE"
+    
+    if [[ ! -s "$file_list" ]]; then
+        echo "No files available for restoration."
+        rm -f "$file_list"
+        return 0
+    fi
+    
+    # Use fzf to select file
+    local selected=$(cat "$file_list" | fzf --prompt="Select file to restore: " --preview="ls -la {2}" --delimiter="|" --with-nth=1)
+    
+    if [[ -n "$selected" ]]; then
+        local original_path=$(echo "$selected" | cut -d'|' -f1)
+        local trash_path=$(echo "$selected" | cut -d'|' -f2)
+        restore_file "$original_path" "$trash_path"
+    fi
+    
+    rm -f "$file_list"
+}
+
+# Main function
+main() {
+    local action="list"
+    local pattern=""
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -l|--list)
+                action="list"
+                shift
+                ;;
+            -i|--interactive)
+                action="interactive"
+                shift
+                ;;
+            --log)
+                action="log"
+                shift
+                ;;
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                show_version
+                exit 0
+                ;;
+            -*)
+                echo -e "${RED}Error: Unknown option $1${NC}" >&2
+                show_help
+                exit 1
+                ;;
+            *)
+                pattern="$1"
+                action="restore"
+                shift
+                ;;
+        esac
+    done
+    
+    case $action in
+        list)
+            list_deleted_files
+            ;;
+        interactive)
+            interactive_restore
+            ;;
+        log)
+            show_log
+            ;;
+        restore)
+            if [[ -z "$pattern" ]]; then
+                echo -e "${RED}Error: Please specify a file pattern to restore${NC}" >&2
+                exit 1
+            fi
+            
+            check_trash_dir
+            check_log_file
+            
+            local found_files=($(find_in_trash "$pattern"))
+            
+            if [[ ${#found_files[@]} -eq 0 ]]; then
+                echo -e "${YELLOW}No files found matching pattern: $pattern${NC}"
+                exit 1
+            elif [[ ${#found_files[@]} -eq 1 ]]; then
+                # Single match, restore directly
+                local file_info="${found_files[0]}"
+                local original_path=$(echo "$file_info" | cut -d'|' -f1)
+                local trash_path=$(echo "$file_info" | cut -d'|' -f2)
+                restore_file "$original_path" "$trash_path"
+            else
+                # Multiple matches, show options
+                echo -e "${BLUE}Multiple files found matching '$pattern':${NC}"
+                for i in "${!found_files[@]}"; do
+                    local file_info="${found_files[$i]}"
+                    local original_path=$(echo "$file_info" | cut -d'|' -f1)
+                    echo "$((i+1)). $original_path"
+                done
+                echo ""
+                read -p "Enter number to restore (1-${#found_files[@]}): " choice
+                
+                if [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 ]] && [[ "$choice" -le ${#found_files[@]} ]]; then
+                    local file_info="${found_files[$((choice-1))]}"
+                    local original_path=$(echo "$file_info" | cut -d'|' -f1)
+                    local trash_path=$(echo "$file_info" | cut -d'|' -f2)
+                    restore_file "$original_path" "$trash_path"
+                else
+                    echo -e "${RED}Invalid selection${NC}"
+                    exit 1
+                fi
+            fi
+            ;;
+    esac
+}
+
+# Run main function
+main "$@"

@@ -1,10 +1,7 @@
 # undos 🗑️  
 The “Undo” for Any Shell Command
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)  
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)](#)  
-[![Language: C](https://img.shields.io/badge/language-C-blue)](#)  
-[![Helper: Bash](https://img.shields.io/badge/helper-Bash-yellow)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) [![Build](https://img.shields.io/badge/build-passing-brightgreen)](#) [![Language: C](https://img.shields.io/badge/language-C-blue)](#) [![Helper: Bash](https://img.shields.io/badge/helper-Bash-yellow)](#)
 
 ---
 
@@ -17,7 +14,7 @@ No trash. No backup. No undo. Just… gone.
 ## 💡 Solution
 **undos** is a lightweight `LD_PRELOAD` wrapper that intercepts destructive file operations and moves them into a safe **trash directory** instead of permanently unlinking.  
 
-- Files are recoverable with `undol`.  
+- Files are recoverable with `undos-restore`.  
 - Every destructive command is **logged** for traceability.  
 - Optional **fzf integration** lets you quickly browse and restore items.
 
@@ -35,7 +32,7 @@ Think of it as a *recycle bin for your shell*.
 ## 🚀 Features
 - Transparent `rm`, `unlink`, and friends → moved, not destroyed.  
 - Logs what you nuked, when, and where.  
-- `undol` command to restore files/folders.  
+- `undos-restore` command to restore files/folders.  
 - Fast + minimal footprint, no daemons.  
 - Works across shells (`bash`, `zsh`, etc.).  
 - Optional **fzf picker** for interactive recovery.
@@ -71,15 +68,15 @@ rm -rf important-stuff/
 ### Restoring
 
 ```bash
-undol                     # list last deleted items
-undol <file>              # restore specific file
-undol -i                  # interactive restore via fzf
+undos-restore             # list last deleted items
+undos-restore <file>      # restore specific file
+undos-restore -i          # interactive restore via fzf
 ```
 
 ### Viewing Logs
 
 ```bash
-undol --log
+undos-restore --log
 ```
 
 ---
